@@ -1,8 +1,8 @@
-# scrcpy
+# scrcpy (v1.2)
 
 This application provides display and control of Android devices connected on
-USB. It does not require any _root_ access. It works on _GNU/Linux_, _Windows_
-and _MacOS_.
+USB (or [over TCP/IP][article-tcpip]). It does not require any _root_ access.
+It works on _GNU/Linux_, _Windows_ and _MacOS_.
 
 ![screenshot](assets/screenshot-debian-600.jpg)
 
@@ -14,16 +14,12 @@ The Android part requires at least API 21 (Android 5.0).
 You need [adb]. It is available in the [Android SDK platform
 tools][platform-tools], or packaged in your distribution (`android-adb-tools`).
 
-On Windows, if you use the [prebuilt application](#windows), it is already
-included. Otherwise, just download the [platform-tools][platform-tools-windows]
-and extract the following files to a directory accessible from your `PATH`:
- - `adb.exe`
- - `AdbWinApi.dll`
- - `AdbWinUsbApi.dll`
+On Windows, just [download scrcpy for Windows](#windows), `adb` is included.
 
 Make sure you [enabled adb debugging][enable-adb] on your device(s).
 
-The client requires [FFmpeg] and [LibSDL2].
+The client requires [FFmpeg] and [LibSDL2]. On Windows, they are included in the
+[prebuilt application](#windows).
 
 [adb]: https://developer.android.com/studio/command-line/adb.html
 [enable-adb]: https://developer.android.com/studio/command-line/adb.html#Enabling
@@ -80,18 +76,54 @@ Two [AUR] packages have been created by users:
 
 #### Windows
 
-For Windows, for simplicity, a prebuilt archive with all the dependencies
-(including `adb`) is available:
+For Windows, for simplicity, prebuilt archives with all the dependencies
+(including `adb`) are available:
 
- - [`scrcpy-windows-with-deps-v1.1.zip`][direct-windows-with-deps].  
-   _(SHA-256: 27eb36c15937601d1062c1dc0b45faae0e06fefea2019aadeb4fa7f76a07bb4c)_
+ - [`scrcpy-win32-v1.2.zip`][direct-win32].  
+   _(SHA-256: a1fe1de67ec75dcf970ca5d97a04c26ff0f2d61871f2ef51b6f2f0bf666966b2)_
+ - [`scrcpy-win64-v1.2.zip`][direct-win64].  
+   _(SHA-256: 35ae3bcee51771e7c51b8a8be87aef2295c9f267606a7cf83ebb0a4d583ef536)_
 
-[direct-windows-with-deps]: https://github.com/Genymobile/scrcpy/releases/download/v1.1/scrcpy-windows-with-deps-v1.1.zip
+[direct-win32]: https://github.com/Genymobile/scrcpy/releases/download/v1.2/scrcpy-win32-v1.2.zip
+[direct-win64]: https://github.com/Genymobile/scrcpy/releases/download/v1.2/scrcpy-win64-v1.2.zip
 
-_(It's just a portable version including _dll_ copied from MSYS2.)_
+Instead, you may want to build it manually.
 
-Instead, you may want to build it manually. You need [MSYS2] to build the
-project. From an MSYS2 terminal, install the required packages:
+In that case, download the [platform-tools][platform-tools-windows] and extract
+the following files to a directory accessible from your `PATH`:
+ - `adb.exe`
+ - `AdbWinApi.dll`
+ - `AdbWinUsbApi.dll`
+
+##### Cross-compile from Linux
+
+This is the preferred method (and the way the release is built).
+
+From _Debian_, install _mingw_:
+
+```bash
+sudo apt install mingw-w64 mingw-w64-tools
+```
+
+You also need the JDK to build the server:
+
+```bash
+sudo apt install openjdk-8-jdk
+```
+
+Then generate the releases:
+
+```bash
+make -f Makefile.CrossWindows
+```
+
+It will generate win32 and win64 releases into `dist/`.
+
+
+##### In MSYS2
+
+From Windows, you need [MSYS2] to build the project. From an MSYS2 terminal,
+install the required packages:
 
 [MSYS2]: http://www.msys2.org/
 
@@ -215,10 +247,10 @@ Since the server binary, that will be pushed to the Android device, does not
 depend on your system and architecture, you may want to use the prebuilt binary
 instead:
 
- - [`scrcpy-server-v1.1.jar`][direct-scrcpy-server].  
-   _(SHA-256: 14826512bf38447ec94adf3b531676ce038d19e7e06757fb4e537882b17e77b3)_
+ - [`scrcpy-server-v1.2.jar`][direct-scrcpy-server].  
+   _(SHA-256: cb39654ed2fda3d30ddff292806950ccc5c394375ea12b974f790c7f38f61f60)_
 
-[direct-scrcpy-server]: https://github.com/Genymobile/scrcpy/releases/download/v1.1/scrcpy-server-v1.1.jar
+[direct-scrcpy-server]: https://github.com/Genymobile/scrcpy/releases/download/v1.2/scrcpy-server-v1.2.jar
 
 In that case, the build does not require Java or the Android SDK.
 
@@ -268,6 +300,12 @@ If several devices are listed in `adb devices`, you must specify the _serial_:
 scrcpy -s 0123456789abcdef
 ```
 
+To show physical touches while scrcpy is running:
+
+```bash
+scrcpy -t
+```
+
 To run without installing:
 
 ```bash
@@ -286,13 +324,15 @@ To run without installing:
  | resize window to remove black borders  | `Ctrl`+`x` \| _Double-click¹_ |
  | click on `HOME`                        | `Ctrl`+`h` \| _Middle-click_  |
  | click on `BACK`                        | `Ctrl`+`b` \| _Right-click²_  |
- | click on `APP_SWITCH`                  | `Ctrl`+`m`                    |
- | click on `VOLUME_UP`                   | `Ctrl`+`+`                    |
- | click on `VOLUME_DOWN`                 | `Ctrl`+`-`                    |
+ | click on `APP_SWITCH`                  | `Ctrl`+`s`                    |
+ | click on `MENU`                        | `Ctrl`+`m`                    |
+ | click on `VOLUME_UP`                   | `Ctrl`+`↑` _(up)_             |
+ | click on `VOLUME_DOWN`                 | `Ctrl`+`↓` _(down)_           |
  | click on `POWER`                       | `Ctrl`+`p`                    |
  | turn screen on                         | _Right-click²_                |
  | paste computer clipboard to device     | `Ctrl`+`v`                    |
  | enable/disable FPS counter (on stdout) | `Ctrl`+`i`                    |
+ | install APK from computer              | drag & drop APK file          |
 
 _¹Double-click on black borders to remove them._  
 _²Right-click turns the screen on if it was off, presses BACK otherwise._
@@ -338,5 +378,8 @@ Read the [developers page].
 
 ## Articles
 
-- [Introducing scrcpy](https://blog.rom1v.com/2018/03/introducing-scrcpy/)
-- [Scrcpy now works wirelessly](https://www.genymotion.com/blog/open-source-project-scrcpy-now-works-wirelessly/)
+- [Introducing scrcpy][article-intro]
+- [Scrcpy now works wirelessly][article-tcpip]
+
+[article-intro]: https://blog.rom1v.com/2018/03/introducing-scrcpy/
+[article-tcpip]: https://www.genymotion.com/blog/open-source-project-scrcpy-now-works-wirelessly/

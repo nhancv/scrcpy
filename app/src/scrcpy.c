@@ -22,12 +22,14 @@
 #include "screen.h"
 #include "server.h"
 #include "tinyxpm.h"
+#include "installer.h"
 
 static struct server server = SERVER_INITIALIZER;
 static struct screen screen = SCREEN_INITIALIZER;
 static struct frames frames;
 static struct decoder decoder;
 static struct controller controller;
+static struct installer installer;
 
 static struct input_manager input_manager = {
     .controller = &controller,
@@ -102,13 +104,38 @@ static void event_loop(void) {
             case SDL_MOUSEBUTTONUP:
                 input_manager_process_mouse_button(&input_manager, &event.button);
                 break;
+            case SDL_DROPFILE:
+                installer_install_apk(&installer, event.drop.file);
+                break;
         }
     }
 }
 
-SDL_bool scrcpy(const char *serial, Uint16 local_port, Uint16 max_size, Uint32 bit_rate) {
-    if (!server_start(&server, serial, local_port, max_size, bit_rate)) {
+static process_t set_show_touches_enabled(const char *serial, SDL_bool enabled) {
+    const char *value = enabled ? "1" : "0";
+    const char *const adb_cmd[] = {
+        "shell", "settings", "put", "system", "show_touches", value
+    };
+    return adb_execute(serial, adb_cmd, ARRAY_LEN(adb_cmd));
+}
+
+static void wait_show_touches(process_t process) {
+    // reap the process, ignore the result
+    process_check_success(process, "show_touches");
+}
+
+SDL_bool scrcpy(const struct scrcpy_options *options) {
+    if (!server_start(&server, options->serial, options->port,
+                      options->max_size, options->bit_rate)) {
         return SDL_FALSE;
+    }
+
+    process_t proc_show_touches = PROCESS_NONE;
+    SDL_bool show_touches_waited;
+    if (options->show_touches) {
+        LOGI("Enable show_touches");
+        proc_show_touches = set_show_touches_enabled(options->serial, SDL_TRUE);
+        show_touches_waited = SDL_FALSE;
     }
 
     SDL_bool ret = SDL_TRUE;
@@ -147,6 +174,12 @@ SDL_bool scrcpy(const char *serial, Uint16 local_port, Uint16 max_size, Uint32 b
         goto finally_destroy_server;
     }
 
+    if (!installer_init(&installer, server.serial)) {
+        ret = SDL_FALSE;
+        server_stop(&server);
+        goto finally_destroy_frames;
+    }
+
     decoder_init(&decoder, &frames, device_socket);
 
     // now we consumed the header values, the socket receives the video stream
@@ -154,7 +187,7 @@ SDL_bool scrcpy(const char *serial, Uint16 local_port, Uint16 max_size, Uint32 b
     if (!decoder_start(&decoder)) {
         ret = SDL_FALSE;
         server_stop(&server);
-        goto finally_destroy_frames;
+        goto finally_destroy_installer;
     }
 
     if (!controller_init(&controller, device_socket)) {
@@ -172,10 +205,16 @@ SDL_bool scrcpy(const char *serial, Uint16 local_port, Uint16 max_size, Uint32 b
         goto finally_stop_and_join_controller;
     }
 
-    event_loop();
+    if (options->show_touches) {
+        wait_show_touches(proc_show_touches);
+        show_touches_waited = SDL_TRUE;
+    }
 
+    event_loop();
     LOGD("quit...");
+
     screen_destroy(&screen);
+
 finally_stop_and_join_controller:
     controller_stop(&controller);
     controller_join(&controller);
@@ -186,9 +225,23 @@ finally_stop_decoder:
     // stop the server before decoder_join() to wake up the decoder
     server_stop(&server);
     decoder_join(&decoder);
+finally_destroy_installer:
+    installer_stop(&installer);
+    installer_join(&installer);
+    installer_destroy(&installer);
 finally_destroy_frames:
     frames_destroy(&frames);
 finally_destroy_server:
+    if (options->show_touches) {
+        if (!show_touches_waited) {
+            // wait the process which enabled "show touches"
+            wait_show_touches(proc_show_touches);
+        }
+        LOGI("Disable show_touches");
+        proc_show_touches = set_show_touches_enabled(options->serial, SDL_FALSE);
+        wait_show_touches(proc_show_touches);
+    }
+
     server_destroy(&server);
 
     return ret;

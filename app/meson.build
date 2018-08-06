@@ -9,6 +9,7 @@ src = [
     'src/fpscounter.c',
     'src/frames.c',
     'src/inputmanager.c',
+    'src/installer.c',
     'src/lockutil.c',
     'src/net.c',
     'src/scrcpy.c',
@@ -18,12 +19,54 @@ src = [
     'src/tinyxpm.c',
 ]
 
-dependencies = [
-    dependency('libavformat'),
-    dependency('libavcodec'),
-    dependency('libavutil'),
-    dependency('sdl2'),
-]
+if not get_option('crossbuild_windows')
+
+    # native build
+    dependencies = [
+        dependency('libavformat'),
+        dependency('libavcodec'),
+        dependency('libavutil'),
+        dependency('sdl2'),
+    ]
+
+else
+
+    # cross-compile mingw32 build (from Linux to Windows)
+    cc = meson.get_compiler('c')
+
+    prebuilt_sdl2 = meson.get_cross_property('prebuilt_sdl2')
+    sdl2_bin_dir = meson.current_source_dir() + '/../prebuilt-deps/' + prebuilt_sdl2 + '/bin'
+    sdl2_lib_dir = meson.current_source_dir() + '/../prebuilt-deps/' + prebuilt_sdl2 + '/lib'
+    sdl2_include_dir = '../prebuilt-deps/' + prebuilt_sdl2 + '/include'
+
+    sdl2 = declare_dependency(
+        dependencies: [
+            cc.find_library('SDL2', dirs: sdl2_bin_dir),
+            cc.find_library('SDL2main', dirs: sdl2_lib_dir),
+        ],
+        include_directories: include_directories(sdl2_include_dir)
+    )
+
+    prebuilt_ffmpeg_shared = meson.get_cross_property('prebuilt_ffmpeg_shared')
+    prebuilt_ffmpeg_dev = meson.get_cross_property('prebuilt_ffmpeg_dev')
+    ffmpeg_bin_dir = meson.current_source_dir() + '/../prebuilt-deps/' + prebuilt_ffmpeg_shared + '/bin'
+    ffmpeg_include_dir = '../prebuilt-deps/' + prebuilt_ffmpeg_dev + '/include'
+    ffmpeg = declare_dependency(
+        dependencies: [
+            cc.find_library('avcodec-58', dirs: ffmpeg_bin_dir),
+            cc.find_library('avformat-58', dirs: ffmpeg_bin_dir),
+            cc.find_library('avutil-56', dirs: ffmpeg_bin_dir),
+        ],
+        include_directories: include_directories(ffmpeg_include_dir)
+    )
+
+    dependencies = [
+        ffmpeg,
+        sdl2,
+        cc.find_library('mingw32')
+    ]
+
+endif
 
 cc = meson.get_compiler('c')
 
@@ -42,7 +85,7 @@ conf = configuration_data()
 conf.set('BUILD_DEBUG', get_option('buildtype') == 'debug')
 
 # the version, updated on release
-conf.set_quoted('SCRCPY_VERSION', '1.1')
+conf.set_quoted('SCRCPY_VERSION', '1.2')
 
 # the prefix used during configuration (meson --prefix=PREFIX)
 conf.set_quoted('PREFIX', get_option('prefix'))
@@ -83,10 +126,22 @@ conf.set('SKIP_FRAMES', get_option('skip_frames'))
 # enable High DPI support
 conf.set('HIDPI_SUPPORT', get_option('hidpi_support'))
 
+# disable console on Windows
+conf.set('WINDOWS_NOCONSOLE', get_option('windows_noconsole'))
+
 configure_file(configuration: conf, output: 'config.h')
 
 src_dir = include_directories('src')
-executable('scrcpy', src, dependencies: dependencies, include_directories: src_dir, install: true)
+
+if get_option('windows_noconsole')
+    c_args = [ '-mwindows' ]
+    link_args = [ '-mwindows' ]
+else
+    c_args = []
+    link_args = []
+endif
+
+executable('scrcpy', src, dependencies: dependencies, include_directories: src_dir, install: true, c_args: c_args, link_args: link_args)
 
 
 ### TESTS
