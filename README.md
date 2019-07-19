@@ -1,4 +1,4 @@
-# scrcpy (v1.2)
+# scrcpy (v1.9)
 
 This application provides display and control of Android devices connected on
 USB (or [over TCP/IP][article-tcpip]). It does not require any _root_ access.
@@ -11,156 +11,58 @@ It works on _GNU/Linux_, _Windows_ and _MacOS_.
 
 The Android part requires at least API 21 (Android 5.0).
 
-You need [adb]. It is available in the [Android SDK platform
-tools][platform-tools], or packaged in your distribution (`android-adb-tools`).
-
-On Windows, just [download scrcpy for Windows](#windows), `adb` is included.
-
 Make sure you [enabled adb debugging][enable-adb] on your device(s).
 
-The client requires [FFmpeg] and [LibSDL2]. On Windows, they are included in the
-[prebuilt application](#windows).
-
-[adb]: https://developer.android.com/studio/command-line/adb.html
 [enable-adb]: https://developer.android.com/studio/command-line/adb.html#Enabling
-[platform-tools]: https://developer.android.com/studio/releases/platform-tools.html
-[platform-tools-windows]: https://dl.google.com/android/repository/platform-tools-latest-windows.zip
-[ffmpeg]: https://en.wikipedia.org/wiki/FFmpeg
-[LibSDL2]: https://en.wikipedia.org/wiki/Simple_DirectMedia_Layer
 
-## Build and install
+On some devices, you also need to enable [an additional option][control] to
+control it using keyboard and mouse.
 
-### System-specific steps
+[control]: https://github.com/Genymobile/scrcpy/issues/70#issuecomment-373286323
 
-#### Linux
 
-Install the required packages from your package manager.
+## Get the app
 
-##### Debian/Ubuntu
 
-```bash
-# runtime dependencies
-sudo apt install ffmpeg libsdl2-2.0.0
+### Linux
 
-# client build dependencies
-sudo apt install make gcc pkg-config meson \
-                 libavcodec-dev libavformat-dev libavutil-dev \
-                 libsdl2-dev
+On Linux, you typically need to [build the app manually][BUILD]. Don't worry,
+it's not that hard.
 
-# server build dependencies
-sudo apt install openjdk-8-jdk
-```
+A [Snap] package is available: [`scrcpy`][snap-link].
 
-##### Fedora
+[snap-link]: https://snapstats.org/snaps/scrcpy
 
-```bash
-# enable RPM fusion free
-sudo dnf install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
+[snap]: https://en.wikipedia.org/wiki/Snappy_(package_manager)
 
-# client build dependencies
-sudo dnf install SDL2-devel ffms2-devel meson gcc make
-
-# server build dependencies
-sudo dnf install java
-```
-
-##### Arch Linux
-
-Two [AUR] packages have been created by users:
-
- - [`scrcpy`](https://aur.archlinux.org/packages/scrcpy/)
- - [`scrcpy-prebuiltserver`](https://aur.archlinux.org/packages/scrcpy-prebuiltserver/)
+For Arch Linux, an [AUR] package is available: [`scrcpy`][aur-link].
 
 [AUR]: https://wiki.archlinux.org/index.php/Arch_User_Repository
+[aur-link]: https://aur.archlinux.org/packages/scrcpy/
+
+For Gentoo, an [Ebuild] is available: [`scrcpy/`][ebuild-link].
+
+[Ebuild]: https://wiki.gentoo.org/wiki/Ebuild
+[ebuild-link]: https://github.com/maggu2810/maggu2810-overlay/tree/master/app-mobilephone/scrcpy
 
 
-#### Windows
+### Windows
 
 For Windows, for simplicity, prebuilt archives with all the dependencies
 (including `adb`) are available:
 
- - [`scrcpy-win32-v1.2.zip`][direct-win32].  
-   _(SHA-256: a1fe1de67ec75dcf970ca5d97a04c26ff0f2d61871f2ef51b6f2f0bf666966b2)_
- - [`scrcpy-win64-v1.2.zip`][direct-win64].  
-   _(SHA-256: 35ae3bcee51771e7c51b8a8be87aef2295c9f267606a7cf83ebb0a4d583ef536)_
+ - [`scrcpy-win32-v1.9.zip`][direct-win32]  
+   _(SHA-256: 3234f7fbcc26b9e399f50b5ca9ed085708954c87fda1b0dd32719d6e7dd861ef)_
+ - [`scrcpy-win64-v1.9.zip`][direct-win64]  
+   _(SHA-256: 0088eca1811ea7c7ac350d636c8465b266e6c830bb268770ff88fddbb493077e)_
 
-[direct-win32]: https://github.com/Genymobile/scrcpy/releases/download/v1.2/scrcpy-win32-v1.2.zip
-[direct-win64]: https://github.com/Genymobile/scrcpy/releases/download/v1.2/scrcpy-win64-v1.2.zip
+[direct-win32]: https://github.com/Genymobile/scrcpy/releases/download/v1.9/scrcpy-win32-v1.9.zip
+[direct-win64]: https://github.com/Genymobile/scrcpy/releases/download/v1.9/scrcpy-win64-v1.9.zip
 
-Instead, you may want to build it manually.
-
-In that case, download the [platform-tools][platform-tools-windows] and extract
-the following files to a directory accessible from your `PATH`:
- - `adb.exe`
- - `AdbWinApi.dll`
- - `AdbWinUsbApi.dll`
-
-##### Cross-compile from Linux
-
-This is the preferred method (and the way the release is built).
-
-From _Debian_, install _mingw_:
-
-```bash
-sudo apt install mingw-w64 mingw-w64-tools
-```
-
-You also need the JDK to build the server:
-
-```bash
-sudo apt install openjdk-8-jdk
-```
-
-Then generate the releases:
-
-```bash
-make -f Makefile.CrossWindows
-```
-
-It will generate win32 and win64 releases into `dist/`.
+You can also [build the app manually][BUILD].
 
 
-##### In MSYS2
-
-From Windows, you need [MSYS2] to build the project. From an MSYS2 terminal,
-install the required packages:
-
-[MSYS2]: http://www.msys2.org/
-
-```bash
-# runtime dependencies
-pacman -S mingw-w64-x86_64-SDL2 \
-          mingw-w64-x86_64-ffmpeg
-
-# client build dependencies
-pacman -S mingw-w64-x86_64-make \
-          mingw-w64-x86_64-gcc \
-          mingw-w64-x86_64-pkg-config \
-          mingw-w64-x86_64-meson
-```
-
-For a 32 bits version, replace `x86_64` by `i686`:
-
-```bash
-# runtime dependencies
-pacman -S mingw-w64-i686-SDL2 \
-          mingw-w64-i686-ffmpeg
-
-# client build dependencies
-pacman -S mingw-w64-i686-make \
-          mingw-w64-i686-gcc \
-          mingw-w64-i686-pkg-config \
-          mingw-w64-i686-meson
-```
-
-Java (>= 7) is not available in MSYS2, so if you plan to build the server,
-install it manually and make it available from the `PATH`:
-
-```bash
-export PATH="$JAVA_HOME/bin:$PATH"
-```
-
-#### Mac OS
+### Mac OS
 
 The application is available in [Homebrew]. Just install it:
 
@@ -170,106 +72,18 @@ The application is available in [Homebrew]. Just install it:
 brew install scrcpy
 ```
 
-Instead, you may want to build it manually. Install the packages:
-
-
-```bash
-# runtime dependencies
-brew install sdl2 ffmpeg
-
-# client build dependencies
-brew install pkg-config meson
-```
-
-Additionally, if you want to build the server, install Java 8 from Caskroom, and
-make it avaliable from the `PATH`:
+You need `adb`, accessible from your `PATH`. If you don't have it yet:
 
 ```bash
-brew tap caskroom/versions
-brew cask install java8
-export JAVA_HOME="$(/usr/libexec/java_home --version 1.8)"
-export PATH="$JAVA_HOME/bin:$PATH"
+brew cask install android-platform-tools
 ```
 
-#### Docker
+You can also [build the app manually][BUILD].
 
-See [pierlon/scrcpy-docker](https://github.com/pierlon/scrcpy-docker).
-
-### Common steps
-
-Install the [Android SDK] (_Android Studio_), and set `ANDROID_HOME` to
-its directory. For example:
-
-[Android SDK]: https://developer.android.com/studio/index.html
-
-```bash
-export ANDROID_HOME=~/android/sdk
-```
-
-Clone the project:
-
-```bash
-git clone https://github.com/Genymobile/scrcpy
-cd scrcpy
-```
-
-Then, build:
-
-```bash
-meson x --buildtype release --strip -Db_lto=true
-cd x
-ninja
-```
-
-You can test it from here:
-
-```bash
-ninja run
-```
-
-Or you can install it on the system:
-
-```bash
-sudo ninja install    # without sudo on Windows
-```
-
-This installs two files:
-
- - `/usr/local/bin/scrcpy`
- - `/usr/local/share/scrcpy/scrcpy-server.jar`
-
-Just remove them to "uninstall" the application.
-
-
-#### Prebuilt server
-
-Since the server binary, that will be pushed to the Android device, does not
-depend on your system and architecture, you may want to use the prebuilt binary
-instead:
-
- - [`scrcpy-server-v1.2.jar`][direct-scrcpy-server].  
-   _(SHA-256: cb39654ed2fda3d30ddff292806950ccc5c394375ea12b974f790c7f38f61f60)_
-
-[direct-scrcpy-server]: https://github.com/Genymobile/scrcpy/releases/download/v1.2/scrcpy-server-v1.2.jar
-
-In that case, the build does not require Java or the Android SDK.
-
-Download the prebuilt server somewhere, and specify its path during the Meson
-configuration:
-
-```bash
-meson x --buildtype release --strip -Db_lto=true \
-    -Dprebuilt_server=/path/to/scrcpy-server.jar
-cd x
-ninja
-sudo ninja install
-```
 
 ## Run
 
-_At runtime, `adb` must be accessible from your `PATH`._
-
-If everything is ok, just plug an Android device, and execute:
+Plug an Android device, and execute:
 
 ```bash
 scrcpy
@@ -281,38 +95,209 @@ It accepts command-line arguments, listed by:
 scrcpy --help
 ```
 
-For example, to decrease video bitrate to 2Mbps (default is 8Mbps):
+## Features
+
+
+### Reduce size
+
+Sometimes, it is useful to mirror an Android device at a lower definition to
+increase performances.
+
+To limit both width and height to some value (e.g. 1024):
 
 ```bash
-scrcpy -b 2M
+scrcpy --max-size 1024
+scrcpy -m 1024  # short version
 ```
 
-To limit the video dimensions (e.g. if the device is 2540×1440, but the host
-screen is smaller, or cannot decode such a high definition):
+The other dimension is computed to that the device aspect-ratio is preserved.
+That way, a device in 1920×1080 will be mirrored at 1024×576.
+
+
+### Change bit-rate
+
+The default bit-rate is 8Mbps. To change the video bitrate (e.g. to 2Mbps):
 
 ```bash
-scrcpy -m 1024
+scrcpy --bit-rate 2M
+scrcpy -b 2M  # short version
 ```
+
+
+### Crop
+
+The device screen may be cropped to mirror only part of the screen.
+
+This is useful for example to mirror only 1 eye of the Oculus Go:
+
+```bash
+scrcpy --crop 1224:1440:0:0   # 1224x1440 at offset (0,0)
+scrcpy -c 1224:1440:0:0       # short version
+```
+
+If `--max-size` is also specified, resizing is applied after cropping.
+
+
+### Wireless
+
+_Scrcpy_ uses `adb` to communicate with the device, and `adb` can [connect] to a
+device over TCP/IP:
+
+1. Connect the device to the same Wi-Fi as your computer.
+2. Get your device IP address (in Settings → About phone → Status).
+3. Enable adb over TCP/IP on your device: `adb tcpip 5555`.
+4. Unplug your device.
+5. Connect to your device: `adb connect DEVICE_IP:5555` _(replace `DEVICE_IP`)_.
+6. Run `scrcpy` as usual.
+
+It may be useful to decrease the bit-rate and the definition:
+
+```bash
+scrcpy --bit-rate 2M --max-size 800
+scrcpy -b2M -m800  # short version
+```
+
+[connect]: https://developer.android.com/studio/command-line/adb.html#wireless
+
+
+### Record screen
+
+It is possible to record the screen while mirroring:
+
+```bash
+scrcpy --record file.mp4
+scrcpy -r file.mkv
+```
+
+To disable mirroring while recording:
+
+```bash
+scrcpy --no-display --record file.mp4
+scrcpy -Nr file.mkv
+# interrupt recording with Ctrl+C
+# Ctrl+C does not terminate properly on Windows, so disconnect the device
+```
+
+"Skipped frames" are recorded, even if they are not displayed in real time (for
+performance reasons). Frames are _timestamped_ on the device, so [packet delay
+variation] does not impact the recorded file.
+
+[packet delay variation]: https://en.wikipedia.org/wiki/Packet_delay_variation
+
+
+### Multi-devices
 
 If several devices are listed in `adb devices`, you must specify the _serial_:
 
 ```bash
-scrcpy -s 0123456789abcdef
+scrcpy --serial 0123456789abcdef
+scrcpy -s 0123456789abcdef  # short version
 ```
 
-To show physical touches while scrcpy is running:
+You can start several instances of _scrcpy_ for several devices.
+
+
+### Fullscreen
+
+The app may be started directly in fullscreen:
 
 ```bash
+scrcpy --fullscreen
+scrcpy -f  # short version
+```
+
+Fullscreen can then be toggled dynamically with `Ctrl`+`f`.
+
+
+### Always on top
+
+The window of app can always be above others by:
+
+```bash
+scrcpy --always-on-top
+scrcpy -T  # short version
+```
+
+
+### Show touches
+
+For presentations, it may be useful to show physical touches (on the physical
+device).
+
+Android provides this feature in _Developers options_.
+
+_Scrcpy_ provides an option to enable this feature on start and disable on exit:
+
+```bash
+scrcpy --show-touches
 scrcpy -t
 ```
 
-To run without installing:
+Note that it only shows _physical_ touches (with the finger on the device).
+
+
+### Install APK
+
+To install an APK, drag & drop an APK file (ending with `.apk`) to the _scrcpy_
+window.
+
+There is no visual feedback, a log is printed to the console.
+
+
+### Push file to device
+
+To push a file to `/sdcard/` on the device, drag & drop a (non-APK) file to the
+_scrcpy_ window.
+
+There is no visual feedback, a log is printed to the console.
+
+
+### Read-only
+
+To disable controls (everything which can interact with the device: input keys,
+mouse events, drag&drop files):
 
 ```bash
-./run x [options]
+scrcpy --no-control
+scrcpy -n
 ```
 
-(where `x` is your build directory).
+### Turn screen off
+
+It is possible to turn the device screen off while mirroring on start with a
+command-line option:
+
+```bash
+scrcpy --turn-screen-off
+scrcpy -S
+```
+
+Or by pressing `Ctrl`+`o` at any time.
+
+To turn it back on, press `POWER` (or `Ctrl`+`p`).
+
+
+### Render expired frames
+
+By default, to minimize latency, _scrcpy_ always renders the last decoded frame
+available, and drops any previous one.
+
+To force the rendering of all frames (at a cost of a possible increased
+latency), use:
+
+```bash
+scrcpy --render-expired-frames
+```
+
+
+### Forward audio
+
+Audio is not forwarded by _scrcpy_. Use [USBaudio] (Linux-only).
+
+Also see [issue #14].
+
+[USBaudio]: https://github.com/rom1v/usbaudio
+[issue #14]: https://github.com/Genymobile/scrcpy/issues/14
 
 
 ## Shortcuts
@@ -326,16 +311,33 @@ To run without installing:
  | click on `BACK`                        | `Ctrl`+`b` \| _Right-click²_  |
  | click on `APP_SWITCH`                  | `Ctrl`+`s`                    |
  | click on `MENU`                        | `Ctrl`+`m`                    |
- | click on `VOLUME_UP`                   | `Ctrl`+`↑` _(up)_             |
- | click on `VOLUME_DOWN`                 | `Ctrl`+`↓` _(down)_           |
+ | click on `VOLUME_UP`                   | `Ctrl`+`↑` _(up)_   (`Cmd`+`↑` on MacOS) |
+ | click on `VOLUME_DOWN`                 | `Ctrl`+`↓` _(down)_ (`Cmd`+`↓` on MacOS) |
  | click on `POWER`                       | `Ctrl`+`p`                    |
- | turn screen on                         | _Right-click²_                |
+ | power on                               | _Right-click²_                |
+ | turn device screen off (keep mirroring)| `Ctrl`+`o`                    |
+ | expand notification panel              | `Ctrl`+`n`                    |
+ | collapse notification panel            | `Ctrl`+`Shift`+`n`            |
+ | copy device clipboard to computer      | `Ctrl`+`c`                    |
  | paste computer clipboard to device     | `Ctrl`+`v`                    |
+ | copy computer clipboard to device      | `Ctrl`+`Shift`+`v`            |
  | enable/disable FPS counter (on stdout) | `Ctrl`+`i`                    |
- | install APK from computer              | drag & drop APK file          |
 
 _¹Double-click on black borders to remove them._  
 _²Right-click turns the screen on if it was off, presses BACK otherwise._
+
+
+## Custom paths
+
+To use a specific _adb_ binary, configure its path in the environment variable
+`ADB`:
+
+    ADB=/path/to/adb scrcpy
+
+To override the path of the `scrcpy-server.jar` file, configure its path in
+`SCRCPY_SERVER_PATH`.
+
+[useful]: https://github.com/Genymobile/scrcpy/issues/278#issuecomment-429330345
 
 
 ## Why _scrcpy_?
@@ -346,6 +348,13 @@ A colleague challenged me to find a name as unpronounceable as [gnirehtet].
 
 [gnirehtet]: https://github.com/Genymobile/gnirehtet
 [`strcpy`]: http://man7.org/linux/man-pages/man3/strcpy.3.html
+
+
+## How to build?
+
+See [BUILD].
+
+[BUILD]: BUILD.md
 
 
 ## Common issues

@@ -9,8 +9,8 @@ import android.media.MediaFormat;
 import android.os.IBinder;
 import android.view.Surface;
 
+import java.io.FileDescriptor;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -22,21 +22,26 @@ public class ScreenEncoder implements Device.RotationListener {
     private static final int REPEAT_FRAME_DELAY = 6; // repeat after 6 frames
 
     private static final int MICROSECONDS_IN_ONE_SECOND = 1_000_000;
+    private static final int NO_PTS = -1;
 
     private final AtomicBoolean rotationChanged = new AtomicBoolean();
+    private final ByteBuffer headerBuffer = ByteBuffer.allocate(12);
 
     private int bitRate;
     private int frameRate;
     private int iFrameInterval;
+    private boolean sendFrameMeta;
+    private long ptsOrigin;
 
-    public ScreenEncoder(int bitRate, int frameRate, int iFrameInterval) {
+    public ScreenEncoder(boolean sendFrameMeta, int bitRate, int frameRate, int iFrameInterval) {
+        this.sendFrameMeta = sendFrameMeta;
         this.bitRate = bitRate;
         this.frameRate = frameRate;
         this.iFrameInterval = iFrameInterval;
     }
 
-    public ScreenEncoder(int bitRate) {
-        this(bitRate, DEFAULT_FRAME_RATE, DEFAULT_I_FRAME_INTERVAL);
+    public ScreenEncoder(boolean sendFrameMeta, int bitRate) {
+        this(sendFrameMeta, bitRate, DEFAULT_FRAME_RATE, DEFAULT_I_FRAME_INTERVAL);
     }
 
     @Override
@@ -48,7 +53,7 @@ public class ScreenEncoder implements Device.RotationListener {
         return rotationChanged.getAndSet(false);
     }
 
-    public void streamScreen(Device device, OutputStream outputStream) throws IOException {
+    public void streamScreen(Device device, FileDescriptor fd) throws IOException {
         MediaFormat format = createFormat(bitRate, frameRate, iFrameInterval);
         device.setRotationListener(this);
         boolean alive;
@@ -56,17 +61,18 @@ public class ScreenEncoder implements Device.RotationListener {
             do {
                 MediaCodec codec = createCodec();
                 IBinder display = createDisplay();
-                Rect deviceRect = device.getScreenInfo().getDeviceSize().toRect();
+                Rect contentRect = device.getScreenInfo().getContentRect();
                 Rect videoRect = device.getScreenInfo().getVideoSize().toRect();
                 setSize(format, videoRect.width(), videoRect.height());
                 configure(codec, format);
                 Surface surface = codec.createInputSurface();
-                setDisplaySurface(display, surface, deviceRect, videoRect);
+                setDisplaySurface(display, surface, contentRect, videoRect);
                 codec.start();
                 try {
-                    alive = encode(codec, outputStream);
-                } finally {
+                    alive = encode(codec, fd);
+                    // do not call stop() on exception, it would trigger an IllegalStateException
                     codec.stop();
+                } finally {
                     destroyDisplay(display);
                     codec.release();
                     surface.release();
@@ -77,11 +83,10 @@ public class ScreenEncoder implements Device.RotationListener {
         }
     }
 
-    private boolean encode(MediaCodec codec, OutputStream outputStream) throws IOException {
-        @SuppressWarnings("checkstyle:MagicNumber")
-        byte[] buf = new byte[bitRate / 8]; // may contain up to 1 second of video
+    private boolean encode(MediaCodec codec, FileDescriptor fd) throws IOException {
         boolean eof = false;
         MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
+
         while (!consumeRotationChange() && !eof) {
             int outputBufferId = codec.dequeueOutputBuffer(bufferInfo, -1);
             eof = (bufferInfo.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0;
@@ -91,15 +96,13 @@ public class ScreenEncoder implements Device.RotationListener {
                     break;
                 }
                 if (outputBufferId >= 0) {
-                    ByteBuffer outputBuffer = codec.getOutputBuffer(outputBufferId);
-                    while (outputBuffer.hasRemaining()) {
-                        int remaining = outputBuffer.remaining();
-                        int len = Math.min(buf.length, remaining);
-                        // the outputBuffer is probably direct (it has no underlying array), and LocalSocket does not expose channels,
-                        // so we must copy the data locally to write them manually to the output stream
-                        outputBuffer.get(buf, 0, len);
-                        outputStream.write(buf, 0, len);
+                    ByteBuffer codecBuffer = codec.getOutputBuffer(outputBufferId);
+
+                    if (sendFrameMeta) {
+                        writeFrameMeta(fd, bufferInfo, codecBuffer.remaining());
                     }
+
+                    IO.writeFully(fd, codecBuffer);
                 }
             } finally {
                 if (outputBufferId >= 0) {
@@ -109,6 +112,25 @@ public class ScreenEncoder implements Device.RotationListener {
         }
 
         return !eof;
+    }
+
+    private void writeFrameMeta(FileDescriptor fd, MediaCodec.BufferInfo bufferInfo, int packetSize) throws IOException {
+        headerBuffer.clear();
+
+        long pts;
+        if ((bufferInfo.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0) {
+            pts = NO_PTS; // non-media data packet
+        } else {
+            if (ptsOrigin == 0) {
+                ptsOrigin = bufferInfo.presentationTimeUs;
+            }
+            pts = bufferInfo.presentationTimeUs - ptsOrigin;
+        }
+
+        headerBuffer.putLong(pts);
+        headerBuffer.putInt(packetSize);
+        headerBuffer.flip();
+        IO.writeFully(fd, headerBuffer);
     }
 
     private static MediaCodec createCodec() throws IOException {
@@ -128,7 +150,7 @@ public class ScreenEncoder implements Device.RotationListener {
     }
 
     private static IBinder createDisplay() {
-        return SurfaceControl.createDisplay("scrcpy", false);
+        return SurfaceControl.createDisplay("scrcpy", true);
     }
 
     private static void configure(MediaCodec codec, MediaFormat format) {

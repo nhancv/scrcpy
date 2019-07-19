@@ -1,9 +1,14 @@
 package com.genymobile.scrcpy;
 
+import android.graphics.Rect;
+
 public class Options {
     private int maxSize;
     private int bitRate;
     private boolean tunnelForward;
+    private Rect crop;
+    private boolean sendFrameMeta; // send PTS so that the client may record properly
+    private boolean control;
 
     public int getMaxSize() {
         return maxSize;
@@ -27,5 +32,29 @@ public class Options {
 
     public void setTunnelForward(boolean tunnelForward) {
         this.tunnelForward = tunnelForward;
+    }
+
+    public Rect getCrop() {
+        return crop;
+    }
+
+    public void setCrop(Rect crop) {
+        this.crop = crop;
+    }
+
+    public boolean getSendFrameMeta() {
+        return sendFrameMeta;
+    }
+
+    public void setSendFrameMeta(boolean sendFrameMeta) {
+        this.sendFrameMeta = sendFrameMeta;
+    }
+
+    public boolean getControl() {
+        return control;
+    }
+
+    public void setControl(boolean control) {
+        this.control = control;
     }
 }

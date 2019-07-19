@@ -14,6 +14,8 @@ public final class ServiceManager {
     private DisplayManager displayManager;
     private InputManager inputManager;
     private PowerManager powerManager;
+    private StatusBarManager statusBarManager;
+    private ClipboardManager clipboardManager;
 
     public ServiceManager() {
         try {
@@ -59,5 +61,19 @@ public final class ServiceManager {
             powerManager = new PowerManager(getService("power", "android.os.IPowerManager"));
         }
         return powerManager;
+    }
+
+    public StatusBarManager getStatusBarManager() {
+        if (statusBarManager == null) {
+            statusBarManager = new StatusBarManager(getService("statusbar", "com.android.internal.statusbar.IStatusBarService"));
+        }
+        return statusBarManager;
+    }
+
+    public ClipboardManager getClipboardManager() {
+        if (clipboardManager == null) {
+            clipboardManager = new ClipboardManager(getService("clipboard", "android.content.IClipboard"));
+        }
+        return clipboardManager;
     }
 }

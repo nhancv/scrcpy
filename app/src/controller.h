@@ -1,31 +1,44 @@
-#ifndef CONTROL_H
-#define CONTROL_H
+#ifndef CONTROLLER_H
+#define CONTROLLER_H
 
-#include "controlevent.h"
-
+#include <stdbool.h>
 #include <SDL2/SDL_mutex.h>
-#include <SDL2/SDL_stdinc.h>
 #include <SDL2/SDL_thread.h>
 
+#include "cbuf.h"
+#include "control_msg.h"
 #include "net.h"
+#include "receiver.h"
+
+struct control_msg_queue CBUF(struct control_msg, 64);
 
 struct controller {
-    socket_t video_socket;
+    socket_t control_socket;
     SDL_Thread *thread;
     SDL_mutex *mutex;
-    SDL_cond *event_cond;
-    SDL_bool stopped;
-    struct control_event_queue queue;
+    SDL_cond *msg_cond;
+    bool stopped;
+    struct control_msg_queue queue;
+    struct receiver receiver;
 };
 
-SDL_bool controller_init(struct controller *controller, socket_t video_socket);
-void controller_destroy(struct controller *controller);
+bool
+controller_init(struct controller *controller, socket_t control_socket);
 
-SDL_bool controller_start(struct controller *controller);
-void controller_stop(struct controller *controller);
-void controller_join(struct controller *controller);
+void
+controller_destroy(struct controller *controller);
 
-// expose simple API to hide control_event_queue
-SDL_bool controller_push_event(struct controller *controller, const struct control_event *event);
+bool
+controller_start(struct controller *controller);
+
+void
+controller_stop(struct controller *controller);
+
+void
+controller_join(struct controller *controller);
+
+bool
+controller_push_msg(struct controller *controller,
+                    const struct control_msg *msg);
 
 #endif

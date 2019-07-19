@@ -1,107 +1,133 @@
 #include "controller.h"
 
-#include "lockutil.h"
+#include <SDL2/SDL_assert.h>
+
+#include "config.h"
+#include "lock_util.h"
 #include "log.h"
 
-SDL_bool controller_init(struct controller *controller, socket_t video_socket) {
-    if (!control_event_queue_init(&controller->queue)) {
-        return SDL_FALSE;
+bool
+controller_init(struct controller *controller, socket_t control_socket) {
+    cbuf_init(&controller->queue);
+
+    if (!receiver_init(&controller->receiver, control_socket)) {
+        return false;
     }
 
     if (!(controller->mutex = SDL_CreateMutex())) {
-        return SDL_FALSE;
+        receiver_destroy(&controller->receiver);
+        return false;
     }
 
-    if (!(controller->event_cond = SDL_CreateCond())) {
+    if (!(controller->msg_cond = SDL_CreateCond())) {
+        receiver_destroy(&controller->receiver);
         SDL_DestroyMutex(controller->mutex);
-        return SDL_FALSE;
+        return false;
     }
 
-    controller->video_socket = video_socket;
-    controller->stopped = SDL_FALSE;
+    controller->control_socket = control_socket;
+    controller->stopped = false;
 
-    return SDL_TRUE;
+    return true;
 }
 
-void controller_destroy(struct controller *controller) {
-    SDL_DestroyCond(controller->event_cond);
+void
+controller_destroy(struct controller *controller) {
+    SDL_DestroyCond(controller->msg_cond);
     SDL_DestroyMutex(controller->mutex);
-    control_event_queue_destroy(&controller->queue);
+
+    struct control_msg msg;
+    while (cbuf_take(&controller->queue, &msg)) {
+        control_msg_destroy(&msg);
+    }
+
+    receiver_destroy(&controller->receiver);
 }
 
-SDL_bool controller_push_event(struct controller *controller, const struct control_event *event) {
-    SDL_bool res;
+bool
+controller_push_msg(struct controller *controller,
+                      const struct control_msg *msg) {
     mutex_lock(controller->mutex);
-    SDL_bool was_empty = control_event_queue_is_empty(&controller->queue);
-    res = control_event_queue_push(&controller->queue, event);
+    bool was_empty = cbuf_is_empty(&controller->queue);
+    bool res = cbuf_push(&controller->queue, *msg);
     if (was_empty) {
-        cond_signal(controller->event_cond);
+        cond_signal(controller->msg_cond);
     }
     mutex_unlock(controller->mutex);
     return res;
 }
 
-static SDL_bool process_event(struct controller *controller, const struct control_event *event) {
-    unsigned char serialized_event[SERIALIZED_EVENT_MAX_SIZE];
-    int length = control_event_serialize(event, serialized_event);
+static bool
+process_msg(struct controller *controller,
+              const struct control_msg *msg) {
+    unsigned char serialized_msg[CONTROL_MSG_SERIALIZED_MAX_SIZE];
+    int length = control_msg_serialize(msg, serialized_msg);
     if (!length) {
-        return SDL_FALSE;
+        return false;
     }
-    int w = net_send_all(controller->video_socket, serialized_event, length);
+    int w = net_send_all(controller->control_socket, serialized_msg, length);
     return w == length;
 }
 
-static int run_controller(void *data) {
+static int
+run_controller(void *data) {
     struct controller *controller = data;
 
     for (;;) {
         mutex_lock(controller->mutex);
-        while (!controller->stopped && control_event_queue_is_empty(&controller->queue)) {
-            cond_wait(controller->event_cond, controller->mutex);
+        while (!controller->stopped && cbuf_is_empty(&controller->queue)) {
+            cond_wait(controller->msg_cond, controller->mutex);
         }
         if (controller->stopped) {
-            // stop immediately, do not process further events
+            // stop immediately, do not process further msgs
             mutex_unlock(controller->mutex);
             break;
         }
-        struct control_event event;
-#ifdef BUILD_DEBUG
-        bool non_empty = control_event_queue_take(&controller->queue, &event);
+        struct control_msg msg;
+        bool non_empty = cbuf_take(&controller->queue, &msg);
         SDL_assert(non_empty);
-#else
-        control_event_queue_take(&controller->queue, &event);
-#endif
         mutex_unlock(controller->mutex);
 
-        SDL_bool ok = process_event(controller, &event);
-        control_event_destroy(&event);
+        bool ok = process_msg(controller, &msg);
+        control_msg_destroy(&msg);
         if (!ok) {
-            LOGD("Cannot write event to socket");
+            LOGD("Could not write msg to socket");
             break;
         }
     }
     return 0;
 }
 
-SDL_bool controller_start(struct controller *controller) {
+bool
+controller_start(struct controller *controller) {
     LOGD("Starting controller thread");
 
-    controller->thread = SDL_CreateThread(run_controller, "controller", controller);
+    controller->thread = SDL_CreateThread(run_controller, "controller",
+                                          controller);
     if (!controller->thread) {
         LOGC("Could not start controller thread");
-        return SDL_FALSE;
+        return false;
     }
 
-    return SDL_TRUE;
+    if (!receiver_start(&controller->receiver)) {
+        controller_stop(controller);
+        SDL_WaitThread(controller->thread, NULL);
+        return false;
+    }
+
+    return true;
 }
 
-void controller_stop(struct controller *controller) {
+void
+controller_stop(struct controller *controller) {
     mutex_lock(controller->mutex);
-    controller->stopped = SDL_TRUE;
-    cond_signal(controller->event_cond);
+    controller->stopped = true;
+    cond_signal(controller->msg_cond);
     mutex_unlock(controller->mutex);
 }
 
-void controller_join(struct controller *controller) {
+void
+controller_join(struct controller *controller) {
     SDL_WaitThread(controller->thread, NULL);
+    receiver_join(&controller->receiver);
 }
