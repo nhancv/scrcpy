@@ -1,25 +1,26 @@
 src = [
     'src/main.c',
+    'src/cli.c',
     'src/command.c',
     'src/control_msg.c',
     'src/controller.c',
-    'src/convert.c',
     'src/decoder.c',
     'src/device.c',
     'src/device_msg.c',
+    'src/event_converter.c',
     'src/file_handler.c',
     'src/fps_counter.c',
     'src/input_manager.c',
-    'src/net.c',
     'src/receiver.c',
     'src/recorder.c',
     'src/scrcpy.c',
     'src/screen.c',
     'src/server.c',
-    'src/str_util.c',
-    'src/tiny_xpm.c',
     'src/stream.c',
+    'src/tiny_xpm.c',
     'src/video_buffer.c',
+    'src/util/net.c',
+    'src/util/str_util.c'
 ]
 
 if not get_option('crossbuild_windows')
@@ -85,7 +86,7 @@ endif
 conf = configuration_data()
 
 # expose the build type
-conf.set('BUILD_DEBUG', get_option('buildtype') == 'debug')
+conf.set('NDEBUG', get_option('buildtype') != 'debug')
 
 # the version, updated on release
 conf.set_quoted('SCRCPY_VERSION', meson.project_version())
@@ -93,7 +94,7 @@ conf.set_quoted('SCRCPY_VERSION', meson.project_version())
 # the prefix used during configuration (meson --prefix=PREFIX)
 conf.set_quoted('PREFIX', get_option('prefix'))
 
-# build a "portable" version (with scrcpy-server.jar accessible from the same
+# build a "portable" version (with scrcpy-server accessible from the same
 # directory as the executable)
 conf.set('PORTABLE', get_option('portable'))
 
@@ -115,15 +116,16 @@ conf.set('HIDPI_SUPPORT', get_option('hidpi_support'))
 # disable console on Windows
 conf.set('WINDOWS_NOCONSOLE', get_option('windows_noconsole'))
 
+# run a server debugger and wait for a client to be attached
+conf.set('SERVER_DEBUGGER', get_option('server_debugger'))
+
 configure_file(configuration: conf, output: 'config.h')
 
 src_dir = include_directories('src')
 
 if get_option('windows_noconsole')
-    c_args = [ '-mwindows' ]
-    link_args = [ '-mwindows' ]
+    link_args = [ '-Wl,--subsystem,windows' ]
 else
-    c_args = []
     link_args = []
 endif
 
@@ -131,34 +133,51 @@ executable('scrcpy', src,
            dependencies: dependencies,
            include_directories: src_dir,
            install: true,
-           c_args: c_args,
+           c_args: [],
            link_args: link_args)
+
+install_man('scrcpy.1')
 
 
 ### TESTS
 
-tests = [
-    ['test_cbuf', [
-        'tests/test_cbuf.c',
-    ]],
-    ['test_control_event_serialize', [
-        'tests/test_control_msg_serialize.c',
-        'src/control_msg.c',
-        'src/str_util.c'
-    ]],
-    ['test_device_event_deserialize', [
-        'tests/test_device_msg_deserialize.c',
-        'src/device_msg.c'
-    ]],
-    ['test_strutil', [
-        'tests/test_strutil.c',
-        'src/str_util.c'
-    ]],
-]
+# do not build tests in release (assertions would not be executed at all)
+if get_option('buildtype') == 'debug'
+    tests = [
+        ['test_buffer_util', [
+            'tests/test_buffer_util.c'
+        ]],
+        ['test_cbuf', [
+            'tests/test_cbuf.c',
+        ]],
+        ['test_cli', [
+            'tests/test_cli.c',
+            'src/cli.c',
+            'src/util/str_util.c',
+        ]],
+        ['test_control_event_serialize', [
+            'tests/test_control_msg_serialize.c',
+            'src/control_msg.c',
+            'src/util/str_util.c',
+        ]],
+        ['test_device_event_deserialize', [
+            'tests/test_device_msg_deserialize.c',
+            'src/device_msg.c',
+        ]],
+        ['test_queue', [
+            'tests/test_queue.c',
+        ]],
+        ['test_strutil', [
+            'tests/test_strutil.c',
+            'src/util/str_util.c',
+        ]],
+    ]
 
-foreach t : tests
-    exe = executable(t[0], t[1],
-                     include_directories: src_dir,
-                     dependencies: dependencies)
-    test(t[0], exe)
-endforeach
+    foreach t : tests
+        exe = executable(t[0], t[1],
+                         include_directories: src_dir,
+                         dependencies: dependencies,
+                         c_args: ['-DSDL_MAIN_HANDLED'])
+        test(t[0], exe)
+    endforeach
+endif

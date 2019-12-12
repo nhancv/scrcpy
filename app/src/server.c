@@ -1,22 +1,22 @@
 #include "server.h"
 
+#include <assert.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <libgen.h>
 #include <stdio.h>
-#include <SDL2/SDL_assert.h>
 #include <SDL2/SDL_timer.h>
 
 #include "config.h"
 #include "command.h"
-#include "log.h"
-#include "net.h"
+#include "util/log.h"
+#include "util/net.h"
 
 #define SOCKET_NAME "scrcpy"
-#define SERVER_FILENAME "scrcpy-server.jar"
+#define SERVER_FILENAME "scrcpy-server"
 
 #define DEFAULT_SERVER_PATH PREFIX "/share/scrcpy/" SERVER_FILENAME
-#define DEVICE_SERVER_PATH "/data/local/tmp/" SERVER_FILENAME
+#define DEVICE_SERVER_PATH "/data/local/tmp/scrcpy-server.jar"
 
 static const char *
 get_server_path(void) {
@@ -32,7 +32,7 @@ get_server_path(void) {
     // the absolute path is hardcoded
     return DEFAULT_SERVER_PATH;
 #else
-    // use scrcpy-server.jar in the same directory as the executable
+    // use scrcpy-server in the same directory as the executable
     char *executable_path = get_executable_path();
     if (!executable_path) {
         LOGE("Could not get executable path, "
@@ -67,7 +67,12 @@ get_server_path(void) {
 
 static bool
 push_server(const char *serial) {
-    process_t process = adb_push(serial, get_server_path(), DEVICE_SERVER_PATH);
+    const char *server_path = get_server_path();
+    if (!is_regular_file(server_path)) {
+        LOGE("'%s' does not exist or is not a regular file\n", server_path);
+        return false;
+    }
+    process_t process = adb_push(serial, server_path, DEVICE_SERVER_PATH);
     return process_check_success(process, "adb push");
 }
 
@@ -118,21 +123,41 @@ static process_t
 execute_server(struct server *server, const struct server_params *params) {
     char max_size_string[6];
     char bit_rate_string[11];
+    char max_fps_string[6];
     sprintf(max_size_string, "%"PRIu16, params->max_size);
     sprintf(bit_rate_string, "%"PRIu32, params->bit_rate);
+    sprintf(max_fps_string, "%"PRIu16, params->max_fps);
     const char *const cmd[] = {
         "shell",
-        "CLASSPATH=/data/local/tmp/" SERVER_FILENAME,
+        "CLASSPATH=" DEVICE_SERVER_PATH,
         "app_process",
+#ifdef SERVER_DEBUGGER
+# define SERVER_DEBUGGER_PORT "5005"
+        "-agentlib:jdwp=transport=dt_socket,suspend=y,server=y,address="
+            SERVER_DEBUGGER_PORT,
+#endif
         "/", // unused
         "com.genymobile.scrcpy.Server",
+        SCRCPY_VERSION,
         max_size_string,
         bit_rate_string,
+        max_fps_string,
         server->tunnel_forward ? "true" : "false",
         params->crop ? params->crop : "-",
-        params->send_frame_meta ? "true" : "false",
+        "true", // always send frame meta (packet boundaries + timestamp)
         params->control ? "true" : "false",
     };
+#ifdef SERVER_DEBUGGER
+    LOGI("Server debugger waiting for a client on device port "
+         SERVER_DEBUGGER_PORT "...");
+    // From the computer, run
+    //     adb forward tcp:5005 tcp:5005
+    // Then, from Android Studio: Run > Debug > Edit configurations...
+    // On the left, click on '+', "Remote", with:
+    //     Host: localhost
+    //     Port: 5005
+    // Then click on "Debug"
+#endif
     return adb_execute(server->serial, cmd, sizeof(cmd) / sizeof(cmd[0]));
 }
 
@@ -179,7 +204,7 @@ connect_to_server(uint16_t port, uint32_t attempts, uint32_t delay) {
 
 static void
 close_socket(socket_t *socket) {
-    SDL_assert(*socket != INVALID_SOCKET);
+    assert(*socket != INVALID_SOCKET);
     net_shutdown(*socket, SHUT_RDWR);
     if (!net_close(*socket)) {
         LOGW("Could not close socket");
@@ -261,7 +286,7 @@ server_connect_to(struct server *server) {
 
         server->control_socket = net_accept(server->server_socket);
         if (server->control_socket == INVALID_SOCKET) {
-            // the video_socket will be clean up on destroy
+            // the video_socket will be cleaned up on destroy
             return false;
         }
 
@@ -303,7 +328,7 @@ server_stop(struct server *server) {
         close_socket(&server->control_socket);
     }
 
-    SDL_assert(server->process != PROCESS_NONE);
+    assert(server->process != PROCESS_NONE);
 
     if (!cmd_terminate(server->process)) {
         LOGW("Could not terminate server");

@@ -1,6 +1,8 @@
-#include "net.h"
+#include "util/net.h"
 
 #include <unistd.h>
+
+#include "config.h"
 
 bool
 net_init(void) {

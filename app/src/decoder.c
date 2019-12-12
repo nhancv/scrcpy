@@ -2,20 +2,18 @@
 
 #include <libavformat/avformat.h>
 #include <libavutil/time.h>
-#include <SDL2/SDL_assert.h>
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_mutex.h>
 #include <SDL2/SDL_thread.h>
 #include <unistd.h>
 
-#include "compat.h"
 #include "config.h"
-#include "buffer_util.h"
+#include "compat.h"
 #include "events.h"
-#include "lock_util.h"
-#include "log.h"
 #include "recorder.h"
 #include "video_buffer.h"
+#include "util/buffer_util.h"
+#include "util/log.h"
 
 // set the decoded frame as ready for rendering, and notify
 static void

@@ -1,6 +1,7 @@
-#include "net.h"
+#include "util/net.h"
 
-#include "log.h"
+#include "config.h"
+#include "util/log.h"
 
 bool
 net_init(void) {

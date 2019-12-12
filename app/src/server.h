@@ -4,8 +4,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "config.h"
 #include "command.h"
-#include "net.h"
+#include "util/net.h"
 
 struct server {
     char *serial;
@@ -34,7 +35,7 @@ struct server_params {
     uint16_t local_port;
     uint16_t max_size;
     uint32_t bit_rate;
-    bool send_frame_meta;
+    uint16_t max_fps;
     bool control;
 };
 

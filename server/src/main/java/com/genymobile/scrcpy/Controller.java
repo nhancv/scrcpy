@@ -13,44 +13,38 @@ import java.io.IOException;
 
 public class Controller {
 
+    private static final int DEVICE_ID_VIRTUAL = -1;
+
     private final Device device;
     private final DesktopConnection connection;
     private final DeviceMessageSender sender;
 
     private final KeyCharacterMap charMap = KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD);
 
-    private long lastMouseDown;
-    private final MotionEvent.PointerProperties[] pointerProperties = {new MotionEvent.PointerProperties()};
-    private final MotionEvent.PointerCoords[] pointerCoords = {new MotionEvent.PointerCoords()};
+    private long lastTouchDown;
+    private final PointersState pointersState = new PointersState();
+    private final MotionEvent.PointerProperties[] pointerProperties = new MotionEvent.PointerProperties[PointersState.MAX_POINTERS];
+    private final MotionEvent.PointerCoords[] pointerCoords = new MotionEvent.PointerCoords[PointersState.MAX_POINTERS];
 
     public Controller(Device device, DesktopConnection connection) {
         this.device = device;
         this.connection = connection;
-        initPointer();
+        initPointers();
         sender = new DeviceMessageSender(connection);
     }
 
-    private void initPointer() {
-        MotionEvent.PointerProperties props = pointerProperties[0];
-        props.id = 0;
-        props.toolType = MotionEvent.TOOL_TYPE_FINGER;
+    private void initPointers() {
+        for (int i = 0; i < PointersState.MAX_POINTERS; ++i) {
+            MotionEvent.PointerProperties props = new MotionEvent.PointerProperties();
+            props.toolType = MotionEvent.TOOL_TYPE_FINGER;
 
-        MotionEvent.PointerCoords coords = pointerCoords[0];
-        coords.orientation = 0;
-        coords.pressure = 1;
-        coords.size = 1;
-    }
+            MotionEvent.PointerCoords coords = new MotionEvent.PointerCoords();
+            coords.orientation = 0;
+            coords.size = 1;
 
-    private void setPointerCoords(Point point) {
-        MotionEvent.PointerCoords coords = pointerCoords[0];
-        coords.x = point.getX();
-        coords.y = point.getY();
-    }
-
-    private void setScroll(int hScroll, int vScroll) {
-        MotionEvent.PointerCoords coords = pointerCoords[0];
-        coords.setAxisValue(MotionEvent.AXIS_HSCROLL, hScroll);
-        coords.setAxisValue(MotionEvent.AXIS_VSCROLL, vScroll);
+            pointerProperties[i] = props;
+            pointerCoords[i] = coords;
+        }
     }
 
     @SuppressWarnings("checkstyle:MagicNumber")
@@ -87,8 +81,8 @@ public class Controller {
             case ControlMessage.TYPE_INJECT_TEXT:
                 injectText(msg.getText());
                 break;
-            case ControlMessage.TYPE_INJECT_MOUSE_EVENT:
-                injectMouse(msg.getAction(), msg.getButtons(), msg.getPosition());
+            case ControlMessage.TYPE_INJECT_TOUCH_EVENT:
+                injectTouch(msg.getAction(), msg.getPointerId(), msg.getPosition(), msg.getPressure(), msg.getButtons());
                 break;
             case ControlMessage.TYPE_INJECT_SCROLL_EVENT:
                 injectScroll(msg.getPosition(), msg.getHScroll(), msg.getVScroll());
@@ -111,6 +105,9 @@ public class Controller {
                 break;
             case ControlMessage.TYPE_SET_SCREEN_POWER_MODE:
                 device.setScreenPowerMode(msg.getAction());
+                break;
+            case ControlMessage.TYPE_ROTATE_DEVICE:
+                device.rotateDevice();
                 break;
             default:
                 // do nothing
@@ -148,19 +145,43 @@ public class Controller {
         return successCount;
     }
 
-    private boolean injectMouse(int action, int buttons, Position position) {
+    private boolean injectTouch(int action, long pointerId, Position position, float pressure, int buttons) {
         long now = SystemClock.uptimeMillis();
-        if (action == MotionEvent.ACTION_DOWN) {
-            lastMouseDown = now;
-        }
+
         Point point = device.getPhysicalPoint(position);
         if (point == null) {
             // ignore event
             return false;
         }
-        setPointerCoords(point);
-        MotionEvent event = MotionEvent.obtain(lastMouseDown, now, action, 1, pointerProperties, pointerCoords, 0, buttons, 1f, 1f, 0, 0,
-                InputDevice.SOURCE_TOUCHSCREEN, 0);
+
+        int pointerIndex = pointersState.getPointerIndex(pointerId);
+        if (pointerIndex == -1) {
+            Ln.w("Too many pointers for touch event");
+            return false;
+        }
+        Pointer pointer = pointersState.get(pointerIndex);
+        pointer.setPoint(point);
+        pointer.setPressure(pressure);
+        pointer.setUp(action == MotionEvent.ACTION_UP);
+
+        int pointerCount = pointersState.update(pointerProperties, pointerCoords);
+
+        if (pointerCount == 1) {
+            if (action == MotionEvent.ACTION_DOWN) {
+                lastTouchDown = now;
+            }
+        } else {
+            // secondary pointers must use ACTION_POINTER_* ORed with the pointerIndex
+            if (action == MotionEvent.ACTION_UP) {
+                action = MotionEvent.ACTION_POINTER_UP | (pointerIndex << MotionEvent.ACTION_POINTER_INDEX_SHIFT);
+            } else if (action == MotionEvent.ACTION_DOWN) {
+                action = MotionEvent.ACTION_POINTER_DOWN | (pointerIndex << MotionEvent.ACTION_POINTER_INDEX_SHIFT);
+            }
+        }
+
+        MotionEvent event = MotionEvent
+                .obtain(lastTouchDown, now, action, pointerCount, pointerProperties, pointerCoords, 0, buttons, 1f, 1f, DEVICE_ID_VIRTUAL, 0,
+                        InputDevice.SOURCE_TOUCHSCREEN, 0);
         return injectEvent(event);
     }
 
@@ -171,10 +192,19 @@ public class Controller {
             // ignore event
             return false;
         }
-        setPointerCoords(point);
-        setScroll(hScroll, vScroll);
-        MotionEvent event = MotionEvent.obtain(lastMouseDown, now, MotionEvent.ACTION_SCROLL, 1, pointerProperties, pointerCoords, 0, 0, 1f, 1f, 0,
-                0, InputDevice.SOURCE_MOUSE, 0);
+
+        MotionEvent.PointerProperties props = pointerProperties[0];
+        props.id = 0;
+
+        MotionEvent.PointerCoords coords = pointerCoords[0];
+        coords.x = point.getX();
+        coords.y = point.getY();
+        coords.setAxisValue(MotionEvent.AXIS_HSCROLL, hScroll);
+        coords.setAxisValue(MotionEvent.AXIS_VSCROLL, vScroll);
+
+        MotionEvent event = MotionEvent
+                .obtain(lastTouchDown, now, MotionEvent.ACTION_SCROLL, 1, pointerProperties, pointerCoords, 0, 0, 1f, 1f, DEVICE_ID_VIRTUAL, 0,
+                        InputDevice.SOURCE_MOUSE, 0);
         return injectEvent(event);
     }
 
@@ -186,8 +216,7 @@ public class Controller {
     }
 
     private boolean injectKeycode(int keyCode) {
-        return injectKeyEvent(KeyEvent.ACTION_DOWN, keyCode, 0, 0)
-                && injectKeyEvent(KeyEvent.ACTION_UP, keyCode, 0, 0);
+        return injectKeyEvent(KeyEvent.ACTION_DOWN, keyCode, 0, 0) && injectKeyEvent(KeyEvent.ACTION_UP, keyCode, 0, 0);
     }
 
     private boolean injectEvent(InputEvent event) {
